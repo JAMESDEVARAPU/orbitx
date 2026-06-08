@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORBITX — Satellite Prediction Platform</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:     #080818; --panel:  #0f0f2a; --border: #1e2050;
+  --accent: #00d4ff; --green:  #00ff9d; --red:    #ff4d6d;
+  --yellow: #ffd166; --text:   #cdd6f4; --muted:  #6c7086;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text);
+             font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+
+/* ── LAYOUT ── */
+.app  { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+.main { display: grid; grid-template-columns: 300px 1fr; overflow: hidden; }
+.sidebar { background: var(--panel); border-right: 1px solid var(--border);
+           overflow-y: auto; display: flex; flex-direction: column; }
+.content { display: grid; grid-template-rows: 1fr 300px; overflow: hidden; }
+
+/* ── TOPBAR ── */
+.topbar { background: linear-gradient(90deg,#060618,#0d0d30);
+          border-bottom: 1px solid var(--border);
+          display: flex; align-items: center; padding: 0 20px; gap: 14px; }
+.topbar h1 { font-size: 1.3em; letter-spacing: 4px; color: var(--accent); }
+.topbar .tagline { color: var(--muted); font-size: 0.78em; flex: 1; }
+.badge { background: var(--accent)22; border: 1px solid var(--accent)66;
+         color: var(--accent); padding: 3px 10px; border-radius: 20px; font-size: 0.72em; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+              box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; flex-shrink:0; }
+.help-btn { background: transparent; border: 1px solid var(--muted); color: var(--muted);
+            border-radius: 50%; width: 26px; height: 26px; cursor: pointer; font-size: 0.85em;
+            transition: border-color .2s, color .2s; }
+.help-btn:hover { border-color: var(--accent); color: var(--accent); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ── SIDEBAR ── */
+.section-title { padding: 12px 16px 6px; font-size: 0.68em; letter-spacing: 2px;
+                 color: var(--muted); text-transform: uppercase;
+                 border-top: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
+.section-title:first-child { border-top: none; }
+.section-hint { font-size: 0.65em; color: var(--muted); padding: 0 16px 8px;
+                line-height: 1.5; border-bottom: 1px solid var(--border)44; }
+.sat-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+            cursor: pointer; border-left: 3px solid transparent;
+            transition: background .15s, border-color .15s; }
+.sat-item:hover  { background: #ffffff08; }
+.sat-item.active { background: var(--accent)11; border-left-color: var(--accent); }
+.sat-dot  { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.sat-name { font-size: 0.83em; flex: 1; }
+.sat-alt  { font-size: 0.72em; color: var(--muted); }
+
+/* ── FORMS ── */
+.form-group { padding: 0 16px 10px; }
+.form-group label { display: block; font-size: 0.72em; color: var(--muted);
+                    margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1px; }
+.form-group .hint { font-size: 0.68em; color: var(--muted)88; margin-top: 2px; line-height: 1.4; }
+.form-group input { width: 100%; padding: 7px 10px; background: #ffffff08;
+                    border: 1px solid var(--border); border-radius: 6px;
+                    color: var(--text); font-size: 0.85em; outline: none; transition: border-color .2s; }
+.form-group input:focus { border-color: var(--accent); }
+
+/* ── BUTTONS ── */
+.btn { display: block; width: calc(100% - 32px); margin: 5px 16px; padding: 9px;
+       border: none; border-radius: 6px; cursor: pointer;
+       font-size: 0.83em; font-weight: 600; letter-spacing: 1px;
+       transition: opacity .2s, transform .1s; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn:hover:not(:disabled) { opacity: .85; }
+.btn:active:not(:disabled) { transform: scale(.98); }
+.btn-primary { background: var(--accent); color: #000; }
+.btn-outline  { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+.btn-green    { background: var(--green); color: #000; }
+
+/* ── MAP ── */
+#map { width: 100%; height: 100%; background: #050510; }
+.leaflet-container { background: #050510 !important; }
+
+/* ── BOTTOM PANEL ── */
+.bottom-panel { background: var(--panel); border-top: 1px solid var(--border);
+                display: flex; flex-direction: column; overflow: hidden; }
+.tab-bar { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.tab { padding: 10px 18px; font-size: 0.78em; cursor: pointer; color: var(--muted);
+       border-bottom: 2px solid transparent; transition: color .2s, border-color .2s;
+       letter-spacing: 1px; text-transform: uppercase; white-space: nowrap; }
+.tab:hover  { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { flex: 1; overflow-y: auto; padding: 12px 16px; display: none; }
+.tab-content.active { display: block; }
+
+/* ── PASS TABLE ── */
+.pass-table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+.pass-table th { background: var(--accent)18; color: var(--accent); padding: 8px 10px;
+                 text-align: left; font-size: 0.72em; letter-spacing: 1px;
+                 text-transform: uppercase; border-bottom: 1px solid var(--border); }
+.pass-table td { padding: 7px 10px; border-bottom: 1px solid var(--border)55; vertical-align: top; }
+.pass-table tr:last-child td { border-bottom: none; }
+.pass-table tr:hover td { background: #ffffff05; }
+.el-high { color: var(--green); } .el-med { color: var(--yellow); } .el-low { color: var(--muted); }
+
+/* ── ML GRID ── */
+.ml-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.metric-bar { background: #ffffff08; border-radius: 6px; height: 5px; margin-top: 3px; overflow: hidden; }
+.metric-bar-fill { height: 100%; border-radius: 6px; transition: width .7s ease; }
+
+/* ── RESULT BOX ── */
+.result-box { background: #ffffff06; border: 1px solid var(--border);
+              border-radius: 8px; padding: 12px; margin-top: 8px; }
+.result-box .rrow { display: flex; justify-content: space-between; align-items: flex-start;
+                    padding: 5px 0; border-bottom: 1px solid var(--border)33; gap: 10px; }
+.result-box .rrow:last-child { border-bottom: none; }
+.result-box .rkey { color: var(--muted); font-size: 0.8em; flex-shrink: 0; }
+.result-box .rval { font-weight: 600; font-size: 0.85em; color: var(--accent); text-align: right; }
+.result-box .rval.green { color: var(--green); }
+.result-box .rval.yellow { color: var(--yellow); }
+.result-box .rval.red    { color: var(--red); }
+.explain-box { background: var(--accent)08; border: 1px solid var(--accent)33;
+               border-radius: 8px; padding: 10px 12px; margin-top: 8px;
+               font-size: 0.8em; line-height: 1.6; color: var(--text); }
+.explain-box b { color: var(--accent); }
+
+/* ── SPINNER ── */
+.spinner { display: inline-block; width: 14px; height: 14px;
+           border: 2px solid var(--border); border-top-color: var(--accent);
+           border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── TOAST ── */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--panel);
+         border: 1px solid var(--accent); color: var(--text); padding: 10px 18px;
+         border-radius: 8px; font-size: 0.85em; z-index: 9999; max-width: 320px;
+         transform: translateY(80px); opacity: 0; transition: transform .3s, opacity .3s; }
+.toast.show { transform: translateY(0); opacity: 1; }
+
+/* ══════════════════════════════════════════════════════════
+   INTRO MODAL
+══════════════════════════════════════════════════════════ */
+.modal-overlay { position: fixed; inset: 0; background: #000000cc;
+                 z-index: 10000; display: flex; align-items: center; justify-content: center;
+                 backdrop-filter: blur(4px); }
+.modal-overlay.hidden { display: none; }
+.modal { background: var(--panel); border: 1px solid var(--accent)55;
+         border-radius: 16px; width: 680px; max-width: 95vw; max-height: 90vh;
+         overflow-y: auto; padding: 36px; position: relative; }
+.modal-close { position: absolute; top: 16px; right: 18px; background: transparent;
+               border: none; color: var(--muted); font-size: 1.4em; cursor: pointer; }
+.modal-close:hover { color: var(--text); }
+.modal h2 { font-size: 1.6em; color: var(--accent); letter-spacing: 3px; text-align: center; }
+.modal .subtitle { text-align: center; color: var(--muted); margin: 8px 0 24px; font-size: 0.9em; }
+.feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+.feature-card { background: #ffffff06; border: 1px solid var(--border);
+                border-radius: 10px; padding: 14px; }
+.feature-card .icon { font-size: 1.6em; margin-bottom: 8px; }
+.feature-card h4 { color: var(--accent); font-size: 0.88em; margin-bottom: 5px; }
+.feature-card p  { color: var(--muted); font-size: 0.78em; line-height: 1.5; }
+.how-step { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.step-num { background: var(--accent); color: #000; border-radius: 50%;
+            width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+            font-size: 0.75em; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+.step-text { font-size: 0.85em; line-height: 1.5; color: var(--text); }
+.step-text b { color: var(--accent); }
+.modal-start { display: block; width: 100%; margin-top: 24px; padding: 14px;
+               background: var(--accent); color: #000; border: none; border-radius: 8px;
+               font-size: 1em; font-weight: 700; letter-spacing: 2px; cursor: pointer;
+               transition: opacity .2s; }
+.modal-start:hover { opacity: .85; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+/* ══════════════════════════════════════════════════════════
+   TRAINING OVERLAY
+══════════════════════════════════════════════════════════ */
+.train-overlay { position: fixed; inset: 0; background: #000000bb;
+                 z-index: 9000; display: flex; align-items: center; justify-content: center;
+                 backdrop-filter: blur(3px); }
+.train-overlay.hidden { display: none; }
+.train-box { background: var(--panel); border: 1px solid var(--accent)44;
+             border-radius: 14px; padding: 36px 40px; width: 440px; max-width: 92vw;
+             text-align: center; }
+.train-box .t-icon { font-size: 3em; margin-bottom: 12px; animation: float 2s ease-in-out infinite; }
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+.train-box h3 { color: var(--accent); font-size: 1.2em; letter-spacing: 2px; margin-bottom: 6px; }
+.train-box .t-sub { color: var(--muted); font-size: 0.82em; margin-bottom: 20px; }
+.train-progress { background: #ffffff08; border-radius: 8px; height: 6px;
+                  overflow: hidden; margin: 14px 0; }
+.train-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--green));
+                       border-radius: 8px; transition: width 1.5s ease; }
+.train-steps { text-align: left; margin-top: 16px; }
+.train-step { display: flex; align-items: center; gap: 10px; padding: 6px 0;
+              font-size: 0.82em; color: var(--muted); transition: color .3s; }
+.train-step.done    { color: var(--green); }
+.train-step.current { color: var(--accent); }
+.train-step .s-icon { font-size: 1em; width: 18px; text-align: center; flex-shrink: 0; }
+.train-time { font-size: 0.75em; color: var(--muted); margin-top: 12px; }
+
+#chart-3d { width: 100%; height: 254px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════
+     INTRO MODAL
+══════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="intro-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeIntro()">✕</button>
+
+    <h2>🛰 ORBITX</h2>
+    <p class="subtitle">A real-time satellite tracking &amp; AI position prediction platform</p>
+
+    <p style="font-size:.88em;line-height:1.7;color:var(--text)">
+      ORBITX tracks <b style="color:var(--accent)">10 real satellites</b> currently orbiting Earth —
+      including the <b style="color:var(--accent)">International Space Station</b>, Hubble Space Telescope,
+      NOAA weather satellites, and Landsat Earth observation satellites.
+      It uses live orbital data from space agencies to show you exactly where each satellite is
+      right now, and uses <b style="color:var(--accent)">Machine Learning</b> to predict where
+      any satellite will be at a future time you choose.
+    </p>
+
+    <hr class="divider">
+    <p style="font-size:.8em;color:var(--accent);letter-spacing:1px;margin-bottom:12px">✦ WHAT YOU CAN DO</p>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="icon">🗺</div>
+        <h4>Live Ground Track</h4>
+        <p>See the path each satellite is flying over Earth right now, plotted on an interactive world map.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📡</div>
+        <h4>Pass Predictions</h4>
+        <p>Find out when a satellite will fly over your location — useful for spotting satellites with the naked eye.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🧠</div>
+        <h4>AI Position Prediction</h4>
+        <p>Train a machine learning model and ask it: "Where will this satellite be in 2 hours?" — then see how accurate it is.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🌍</div>
+        <h4>3D Orbit View</h4>
+        <p>Watch the satellite's orbit path drawn around a 3D Earth globe in your browser.</p>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <p style="font-size:.8em;color:var(--accent);letter-spacing:1px;margin-bottom:14px">✦ HOW TO USE IT</p>
+
+    <div class="how-step">
+      <div class="step-num">1</div>
+      <div class="step-text"><b>Pick a satellite</b> from the list on the left — e.g. "ISS (ZARYA)" is the International Space Station. Its dot on the map shows its current location.</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">2</div>
+      <div class="step-text"><b>Set your location</b> under "Ground Station" to see when that satellite will pass over your city. Enter your city's latitude and longitude, then click "Predict Passes".</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">3</div>
+      <div class="step-text"><b>Use the AI Predictor</b> — type a number of seconds into the future (e.g. 3600 = 1 hour) and click "Train &amp; Predict". The AI will guess where the satellite will be, then compare it against the real answer.</div>
+    </div>
+    <div class="how-step">
+      <div class="step-num">4</div>
+      <div class="step-text"><b>Explore the tabs</b> at the bottom: Pass Predictions, ML Prediction results, 3D Orbit, and Satellite Info.</div>
+    </div>
+
+    <button class="modal-start" onclick="closeIntro()">🚀 LAUNCH ORBITX</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     TRAINING OVERLAY
+══════════════════════════════════════════════════════ -->
+<div class="train-overlay hidden" id="train-overlay">
+  <div class="train-box">
+    <div class="t-icon">🧠</div>
+    <h3>TRAINING AI MODEL</h3>
+    <div class="t-sub" id="train-sat-name">Please wait while we train the model...</div>
+
+    <div class="train-progress">
+      <div class="train-progress-fill" id="train-prog-fill" style="width:0%"></div>
+    </div>
+
+    <div class="train-steps">
+      <div class="train-step" id="tstep-0">
+        <span class="s-icon">⏳</span> Fetching satellite orbital data
+      </div>
+      <div class="train-step" id="tstep-1">
+        <span class="s-icon">⏳</span> Simulating 2,000 orbital positions
+      </div>
+      <div class="train-step" id="tstep-2">
+        <span class="s-icon">⏳</span> Training Linear Regression model
+      </div>
+      <div class="train-step" id="tstep-3">
+        <span class="s-icon">⏳</span> Training Random Forest model
+      </div>
+      <div class="train-step" id="tstep-4">
+        <span class="s-icon">⏳</span> Evaluating model accuracy
+      </div>
+      <div class="train-step" id="tstep-5">
+        <span class="s-icon">⏳</span> Running position prediction
+      </div>
+    </div>
+
+    <div class="train-time" id="train-elapsed">Elapsed: 0s</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════════════════════ -->
+<div class="app">
+
+  <div class="topbar">
+    <div class="status-dot"></div>
+    <h1>🛰 ORBITX</h1>
+    <span class="tagline">Real-Time Satellite Tracking &amp; AI Prediction Platform</span>
+    <span class="badge">LIVE TLE</span>
+    <span class="badge">SGP4</span>
+    <span class="badge" id="sat-count-badge">10 SATs</span>
+    <button class="help-btn" onclick="openIntro()" title="What is this?">?</button>
+  </div>
+
+  <div class="main">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+
+      <div class="section-title">🛰 Satellites</div>
+      <div class="section-hint">Click any satellite to see its live position and orbit path on the map.</div>
+      <div id="sat-list">
+        <div style="padding:16px;color:var(--muted);font-size:.82em">
+          <span class="spinner"></span>&nbsp; Connecting to CelesTrak...
+        </div>
+      </div>
+
+      <div class="section-title">📍 Your Ground Station</div>
+      <div class="section-hint">Set your location to find out when satellites will fly over you.</div>
+      <div class="form-group">
+        <label>City / Station Name</label>
+        <input id="gs-name" type="text" value="New York" placeholder="e.g. London">
+      </div>
+      <div class="form-group">
+        <label>Latitude</label>
+        <input id="gs-lat" type="number" value="40.7128" step="0.0001">
+        <div class="hint">North is positive — e.g. London = 51.5074</div>
+      </div>
+      <div class="form-group">
+        <label>Longitude</label>
+        <input id="gs-lon" type="number" value="-74.0060" step="0.0001">
+        <div class="hint">West is negative — e.g. London = -0.1278</div>
+      </div>
+      <button class="btn btn-outline" onclick="updateGroundStation()">📍 Update My Location</button>
+
+      <div class="section-title">🔭 Pass Prediction</div>
+      <div class="section-hint">How many hours ahead to search, and the minimum angle above your horizon.</div>
+      <div class="form-group">
+        <label>Look-ahead Window (hours)</label>
+        <input id="pass-hours" type="number" value="24" min="1" max="72">
+        <div class="hint">How far into the future to search for passes</div>
+      </div>
+      <div class="form-group">
+        <label>Minimum Elevation (°)</label>
+        <input id="pass-min-el" type="number" value="10" min="0" max="90">
+        <div class="hint">0° = horizon, 90° = directly overhead. 10° is recommended.</div>
+      </div>
+      <button class="btn btn-primary" onclick="loadPasses()">🔭 Find Passes Over Me</button>
+
+      <div class="section-title">🧠 AI Position Predictor</div>
+      <div class="section-hint">The AI learns the satellite's orbit, then predicts where it will be at the time you choose.</div>
+      <div class="form-group">
+        <label>Predict position this far ahead (seconds)</label>
+        <input id="ml-time" type="number" value="3600" min="0" max="259200" step="60">
+        <div class="hint">3600 = 1 hour &nbsp;|&nbsp; 7200 = 2 hours &nbsp;|&nbsp; 86400 = 1 day</div>
+      </div>
+      <button class="btn btn-green" id="train-btn" onclick="trainModel()">🧠 Train &amp; Predict</button>
+      <div id="train-status" style="padding:3px 16px 8px;font-size:.72em;color:var(--muted)"></div>
+
+      <div class="section-title">⚙ Actions</div>
+      <button class="btn btn-outline" onclick="refreshTLE()">🔄 Refresh Live Satellite Data</button>
+      <button class="btn btn-outline" onclick="loadTrack()">🗺 Reload Ground Track</button>
+      <div style="height:20px"></div>
+
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content">
+      <div id="map"></div>
+
+      <div class="bottom-panel">
+        <div class="tab-bar">
+          <div class="tab active" onclick="switchTab('passes')">📡 Pass Predictions</div>
+          <div class="tab" onclick="switchTab('ml')">🧠 AI Prediction</div>
+          <div class="tab" onclick="switchTab('orbit3d')">🌍 3D Orbit</div>
+          <div class="tab" onclick="switchTab('info')">ℹ Satellite Info</div>
+        </div>
+
+        <!-- PASSES TAB -->
+        <div class="tab-content active" id="tab-passes">
+          <div id="passes-content">
+            <div class="explain-box">
+              <b>📡 What is a Pass?</b><br>
+              A "pass" is when a satellite flies over your location and becomes visible above your horizon.
+              Select a satellite on the left, set your location, and click <b>Find Passes Over Me</b> to see
+              the exact times it will pass over you — including how high it will appear in the sky.
+            </div>
+          </div>
+        </div>
+
+        <!-- ML TAB -->
+        <div class="tab-content" id="tab-ml">
+          <div id="ml-intro-box" class="explain-box">
+            <b>🧠 How does the AI Predictor work?</b><br>
+            The AI studies the satellite's orbital shape — things like how tilted the orbit is, how
+            elliptical it is, and how fast the satellite moves. It then learns a mathematical pattern
+            that maps "time in the future" → "position in space". Once trained, you can ask it
+            <i>"Where will this satellite be in 2 hours?"</i> and it will give you a predicted answer,
+            which is then compared against the true physics-calculated position.
+          </div>
+          <div class="ml-grid" style="margin-top:10px">
+            <div>
+              <div id="ml-status" style="color:var(--muted);font-size:.82em;margin-bottom:8px">
+                Select a satellite and click "Train &amp; Predict" to begin.
+              </div>
+              <div id="ml-metrics"></div>
+            </div>
+            <div id="ml-result"></div>
+          </div>
+        </div>
+
+        <!-- 3D ORBIT TAB -->
+        <div class="tab-content" id="tab-orbit3d">
+          <div id="chart-3d"></div>
+        </div>
+
+        <!-- INFO TAB -->
+        <div class="tab-content" id="tab-info">
+          <div id="info-content">
+            <div class="explain-box">
+              <b>ℹ Select a satellite</b> from the left panel to view its current position,
+              speed, altitude, and orbital parameters.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ─────────────────────────────────────────────────
+const SAT_COLORS = ["#00d4ff","#ff6b6b","#76ff03","#ffd166","#ff4081",
+                    "#40c4ff","#ea80fc","#ff6d00","#69ff47","#f4ff81"];
+let satellites = [], selectedCatnr = null, trackLayer = null,
+    markers = {}, groundMarker = null, pollTimer = null,
+    gs = { name:"New York", lat:40.7128, lon:-74.006 };
+
+// ── MAP ───────────────────────────────────────────────────
+const map = L.map("map", { zoomControl:true, attributionControl:false });
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+            { maxZoom:18 }).addTo(map);
+map.setView([20,0],2);
+
+function makeIcon(color, size=12) {
+  return L.divIcon({ className:"",
+    html:`<div style="width:${size}px;height:${size}px;border-radius:50%;
+          background:${color};box-shadow:0 0 8px ${color};border:2px solid #fff4"></div>`,
+    iconSize:[size,size], iconAnchor:[size/2,size/2] });
+}
+
+function placeGroundStation() {
+  if (groundMarker) groundMarker.remove();
+  groundMarker = L.marker([gs.lat,gs.lon],{ icon:L.divIcon({
+    className:"",
+    html:`<div style="font-size:18px;filter:drop-shadow(0 0 4px #ff4d6d)">📍</div>`,
+    iconSize:[20,20], iconAnchor:[10,18]
+  })}).addTo(map).bindTooltip(`📍 ${gs.name}`);
+}
+
+// ── INTRO MODAL ───────────────────────────────────────────
+function openIntro()  { document.getElementById("intro-modal").classList.remove("hidden"); }
+function closeIntro() { document.getElementById("intro-modal").classList.add("hidden"); }
+
+// ── SATELLITES ────────────────────────────────────────────
+async function loadSatellites() {
+  const res  = await fetch("/api/satellites");
+  satellites = await res.json();
+  document.getElementById("sat-count-badge").textContent = `${satellites.length} SATs`;
+
+  const list = document.getElementById("sat-list");
+  list.innerHTML = "";
+  satellites.forEach((sat, idx) => {
+    const color  = SAT_COLORS[idx % SAT_COLORS.length];
+    const pos    = sat.position;
+    const altTxt = pos ? `${pos.alt_km} km` : "N/A";
+    const div    = document.createElement("div");
+    div.className = "sat-item";
+    div.id = `sat-${sat.catnr}`;
+    div.innerHTML = `
+      <div class="sat-dot" style="background:${color};box-shadow:0 0 5px ${color}"></div>
+      <div class="sat-name">${sat.name}</div>
+      <div class="sat-alt">${altTxt}</div>`;
+    div.onclick = () => selectSatellite(sat.catnr, color);
+    list.appendChild(div);
+    if (pos) {
+      const m = L.marker([pos.lat,pos.lon],{ icon:makeIcon(color) })
+                 .addTo(map)
+                 .bindTooltip(`<b>${sat.name}</b><br>Alt: ${pos.alt_km} km | Speed: ${pos.speed_km_s} km/s`);
+      markers[sat.catnr] = { marker:m, color };
+    }
+  });
+  placeGroundStation();
+  if (satellites.length > 0) selectSatellite(satellites[0].catnr, SAT_COLORS[0]);
+}
+
+function selectSatellite(catnr, color) {
+  selectedCatnr = catnr;
+  document.querySelectorAll(".sat-item").forEach(el => el.classList.remove("active"));
+  const el = document.getElementById(`sat-${catnr}`);
+  if (el) el.classList.add("active");
+  loadTrack(catnr, color);
+  loadInfo(catnr);
+  startLiveUpdate(catnr, color);
+}
+
+// ── GROUND TRACK ──────────────────────────────────────────
+async function loadTrack(catnr, color) {
+  catnr = catnr || selectedCatnr;
+  if (!catnr) return;
+  color = color || (markers[catnr] && markers[catnr].color) || "#00d4ff";
+  const sat  = satellites.find(s => s.catnr === catnr);
+  const res  = await fetch(`/api/track/${catnr}?hours=2`);
+  const data = await res.json();
+  if (trackLayer) trackLayer.remove();
+  const pts = data.track.map(p => [p.lat, p.lon]);
+  const segs = []; let seg = [];
+  for (let i = 0; i < pts.length; i++) {
+    if (i > 0 && Math.abs(pts[i][1]-pts[i-1][1]) > 180) { segs.push(seg); seg=[]; }
+    seg.push(pts[i]);
+  }
+  segs.push(seg);
+  const lines = segs.filter(s=>s.length>1).map(s => L.polyline(s,{color,weight:2,opacity:.7}));
+  trackLayer = L.layerGroup(lines).addTo(map);
+  if (pts.length > 0) map.fitBounds(L.latLngBounds(pts),{padding:[40,40]});
+  draw3DOrbit(data.track, color, sat ? sat.name : catnr);
+}
+
+// ── LIVE UPDATE ───────────────────────────────────────────
+function startLiveUpdate(catnr, color) {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(() => updatePosition(catnr, color), 5000);
+  updatePosition(catnr, color);
+}
+
+async function updatePosition(catnr) {
+  const res  = await fetch("/api/satellites");
+  const list = await res.json();
+  const sat  = list.find(s => s.catnr === catnr);
+  if (!sat || !sat.position) return;
+  const pos = sat.position;
+  const mk  = markers[catnr];
+  if (mk) {
+    mk.marker.setLatLng([pos.lat, pos.lon]);
+    mk.marker.setTooltipContent(`<b>${sat.name}</b><br>Alt: ${pos.alt_km} km | ${pos.speed_km_s} km/s`);
+  }
+  const el = document.getElementById("info-current");
+  if (el) el.innerHTML = buildPosHTML(sat.name, pos);
+}
+
+function buildPosHTML(name, pos) {
+  return `<div class="result-box">
+    <div style="font-size:.72em;color:var(--accent);letter-spacing:1px;margin-bottom:8px">
+      📍 ${name} — LIVE POSITION (updates every 5s)
+    </div>
+    <div class="rrow"><span class="rkey">Above Earth at</span>
+      <span class="rval">${pos.lat}° N/S, ${pos.lon}° E/W</span></div>
+    <div class="rrow"><span class="rkey">Altitude</span>
+      <span class="rval">${pos.alt_km} km above sea level</span></div>
+    <div class="rrow"><span class="rkey">Speed</span>
+      <span class="rval">${pos.speed_km_s} km/s (${(pos.speed_km_s*3600).toFixed(0)} km/h)</span></div>
+  </div>`;
+}
+
+// ── PASS PREDICTIONS ──────────────────────────────────────
+async function loadPasses() {
+  if (!selectedCatnr) { toast("Select a satellite first"); return; }
+  const hours = document.getElementById("pass-hours").value;
+  const minEl = document.getElementById("pass-min-el").value;
+  const url   = `/api/passes/${selectedCatnr}?lat=${gs.lat}&lon=${gs.lon}&name=${encodeURIComponent(gs.name)}&hours=${hours}&min_el=${minEl}`;
+  document.getElementById("passes-content").innerHTML =
+    `<span class="spinner"></span>&nbsp; Calculating satellite passes over <b>${gs.name}</b>...`;
+  switchTab("passes");
+  const res  = await fetch(url);
+  const data = await res.json();
+
+  if (!data.passes || data.passes.length === 0) {
+    document.getElementById("passes-content").innerHTML = `
+      <div class="explain-box">
+        No passes found for <b>${data.satellite}</b> over <b>${gs.name}</b> above ${minEl}°
+        in the next ${hours} hours. Try reducing the minimum elevation or increasing the
+        look-ahead window.
+      </div>`;
+    return;
+  }
+
+  let html = `
+    <div class="explain-box" style="margin-bottom:10px">
+      Found <b style="color:var(--green)">${data.passes.length} passes</b> for
+      <b>${data.satellite}</b> over <b>${gs.name}</b> in the next ${hours} hours.<br>
+      <b>AOS</b> = when it rises above your horizon &nbsp;|&nbsp;
+      <b>LOS</b> = when it disappears &nbsp;|&nbsp;
+      <b>Max Elevation</b> = highest point in the sky (90° = directly overhead)
+    </div>
+    <table class="pass-table">
+      <thead><tr>
+        <th>#</th><th>Rises (AOS)</th><th>Sets (LOS)</th>
+        <th>Duration</th><th>Max Height in Sky</th><th>Distance</th>
+      </tr></thead><tbody>`;
+
+  data.passes.forEach((p, i) => {
+    const aos = new Date(p.aos).toUTCString().replace(" GMT","");
+    const los = p.los ? new Date(p.los).toUTCString().replace(" GMT","") : "—";
+    const elClass = p.max_elevation >= 60 ? "el-high" : p.max_elevation >= 30 ? "el-med" : "el-low";
+    const elLabel = p.max_elevation >= 60 ? "🟢 High" : p.max_elevation >= 30 ? "🟡 Medium" : "Low";
+    html += `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td>${aos}</td><td>${los}</td>
+      <td>${p.duration_min} min</td>
+      <td class="${elClass}">${p.max_elevation}° &nbsp;${elLabel}</td>
+      <td style="color:var(--muted)">${p.range_km.toLocaleString()} km away</td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  document.getElementById("passes-content").innerHTML = html;
+}
+
+// ── TRAINING OVERLAY ──────────────────────────────────────
+const TRAIN_STEPS = [
+  "Fetching satellite orbital data",
+  "Simulating 2,000 orbital positions",
+  "Training Linear Regression model",
+  "Training Random Forest model",
+  "Evaluating model accuracy",
+  "Running position prediction"
+];
+const STEP_TIMINGS = [4, 8, 14, 22, 28, 32]; // approx seconds each step completes at
+let trainStartTime = null, trainTimer = null;
+
+function showTrainOverlay(satName) {
+  document.getElementById("train-sat-name").textContent =
+    `Teaching the AI about ${satName}'s orbit. Please wait...`;
+  document.getElementById("train-prog-fill").style.width = "0%";
+  for (let i = 0; i < 6; i++) {
+    const el = document.getElementById(`tstep-${i}`);
+    el.className = "train-step";
+    el.querySelector(".s-icon").textContent = "⏳";
+  }
+  document.getElementById("train-elapsed").textContent = "Elapsed: 0s";
+  document.getElementById("train-overlay").classList.remove("hidden");
+  trainStartTime = Date.now();
+  trainTimer = setInterval(updateTrainOverlay, 500);
+}
+
+function updateTrainOverlay() {
+  const elapsed = Math.floor((Date.now() - trainStartTime) / 1000);
+  document.getElementById("train-elapsed").textContent = `Elapsed: ${elapsed}s — this takes ~30 seconds`;
+  const pct = Math.min(95, (elapsed / 35) * 100);
+  document.getElementById("train-prog-fill").style.width = pct + "%";
+  for (let i = 0; i < STEP_TIMINGS.length; i++) {
+    const el = document.getElementById(`tstep-${i}`);
+    if (elapsed >= STEP_TIMINGS[i]) {
+      el.className = "train-step done";
+      el.querySelector(".s-icon").textContent = "✅";
+    } else if (i === 0 || elapsed >= STEP_TIMINGS[i-1]) {
+      el.className = "train-step current";
+      el.querySelector(".s-icon").textContent = "⚙";
+    }
+  }
+}
+
+function hideTrainOverlay() {
+  clearInterval(trainTimer);
+  document.getElementById("train-prog-fill").style.width = "100%";
+  for (let i = 0; i < 6; i++) {
+    const el = document.getElementById(`tstep-${i}`);
+    el.className = "train-step done";
+    el.querySelector(".s-icon").textContent = "✅";
+  }
+  setTimeout(() => {
+    document.getElementById("train-overlay").classList.add("hidden");
+  }, 800);
+}
+
+// ── ML TRAIN & PREDICT ────────────────────────────────────
+async function trainModel() {
+  if (!selectedCatnr) { toast("Select a satellite first"); return; }
+
+  const satName = getSelectedName();
+  const btn     = document.getElementById("train-btn");
+  btn.disabled  = true;
+  document.getElementById("train-status").textContent = "";
+  document.getElementById("ml-intro-box") && (document.getElementById("ml-intro-box").style.display = "none");
+  switchTab("ml");
+  showTrainOverlay(satName);
+
+  // Training is synchronous — /api/train blocks until done
+  const res  = await fetch(`/api/train/${selectedCatnr}`, { method:"POST" });
+  const info = await res.json();
+
+  hideTrainOverlay();
+  btn.disabled = false;
+
+  if (info.status === "ready") {
+    document.getElementById("train-status").innerHTML =
+      `<span style="color:var(--green)">✅ Model trained successfully!</span>`;
+    renderMetrics(info.metrics, satName);
+    predictPosition();
+  } else {
+    const msg = info.error || "Unknown error";
+    document.getElementById("train-status").textContent = "Error: " + msg;
+    document.getElementById("ml-status").innerHTML =
+      `<span style="color:var(--red)">Training failed: ${msg}</span>`;
+  }
+}
+
+function getSelectedName() {
+  const sat = satellites.find(s => s.catnr === selectedCatnr);
+  return sat ? sat.name : selectedCatnr;
+}
+
+function renderMetrics(metrics, satName) {
+  const best = Object.entries(metrics).sort((a,b) => b[1].r2 - a[1].r2)[0];
+  const bestName = best[0];
+  let html = `
+    <div style="font-size:.72em;color:var(--accent);letter-spacing:1px;margin-bottom:8px">
+      MODEL ACCURACY REPORT
+    </div>
+    <div class="explain-box" style="margin-bottom:10px;font-size:.78em">
+      We trained <b>${Object.keys(metrics).length} different AI models</b> on the orbital data
+      of <b>${satName}</b>. The best one was <b>${bestName}</b>
+      with an average prediction error of <b>${best[1].avg_error_km} km</b>.
+      R² score measures how well the model fits the data (1.0 = perfect).
+    </div>`;
+  for (const [name, m] of Object.entries(metrics)) {
+    const isBest  = name === bestName;
+    const r2pct   = Math.max(0, Math.min(100, m.r2 * 100));
+    const barColor = isBest ? "var(--green)" : "var(--accent)";
+    html += `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:.78em">
+        <span style="color:${isBest ? "var(--green)" : "var(--text)"}">
+          ${isBest ? "★ BEST → " : ""}${name}
+        </span>
+        <span style="color:var(--accent)">R²: ${m.r2}</span>
+      </div>
+      <div class="metric-bar">
+        <div class="metric-bar-fill" style="width:${Math.max(2,r2pct)}%;background:${barColor}"></div>
+      </div>
+      <div style="font-size:.7em;color:var(--muted);margin-top:2px">
+        Avg error: ${m.avg_error_km} km &nbsp;|&nbsp; MSE: ${m.mse.toLocaleString()}
+      </div>
+    </div>`;
+  }
+  document.getElementById("ml-metrics").innerHTML = html;
+  document.getElementById("ml-status").innerHTML =
+    `<span style="color:var(--green)">✅ Training complete for ${satName}</span>`;
+}
+
+async function predictPosition() {
+  if (!selectedCatnr) return;
+  const timeOffset = parseFloat(document.getElementById("ml-time").value);
+  const hours      = (timeOffset / 3600).toFixed(1);
+  const satName    = getSelectedName();
+
+  const res  = await fetch(`/api/predict/${selectedCatnr}`,{
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ time_offset: timeOffset })
+  });
+  const data = await res.json();
+
+  if (data.error) {
+    document.getElementById("ml-result").innerHTML =
+      `<div class="explain-box" style="border-color:var(--red)33;color:var(--red)">${data.error}</div>`;
+    return;
+  }
+
+  const p = data.predicted;
+  const t = data.true;
+
+  // Accuracy label
+  let accLabel = "", accColor = "var(--green)";
+  if (t) {
+    if      (t.error_km < 100)  { accLabel = "🟢 Very accurate";   accColor = "var(--green)"; }
+    else if (t.error_km < 500)  { accLabel = "🟡 Good estimate";   accColor = "var(--yellow)"; }
+    else if (t.error_km < 2000) { accLabel = "🟠 Rough estimate";  accColor = "orange"; }
+    else                         { accLabel = "🔴 Low accuracy";    accColor = "var(--red)"; }
+  }
+
+  let html = `
+    <div style="font-size:.72em;color:var(--accent);letter-spacing:1px;margin-bottom:8px">
+      🎯 PREDICTION RESULT
+    </div>
+    <div class="explain-box" style="margin-bottom:8px">
+      The AI predicts that <b>${satName}</b> will be at the location below
+      in <b>${hours} hours</b> from its reference time.
+      ${t ? `The <span style="color:var(--green)">green values</span> show the
+      <b>true position</b> calculated by physics — so you can see how close the AI got.` : ""}
+    </div>
+
+    <div class="result-box">
+      <div class="rrow">
+        <span class="rkey">🤖 AI Predicted Location</span>
+        <span class="rval">${p.lat}° lat, ${p.lon}° lon</span>
+      </div>
+      <div class="rrow">
+        <span class="rkey">🤖 Predicted Altitude</span>
+        <span class="rval">${p.alt_km} km above Earth</span>
+      </div>`;
+
+  if (t) {
+    html += `
+      <div class="rrow">
+        <span class="rkey">✅ True Location (physics)</span>
+        <span class="rval green">${t.lat}° lat, ${t.lon}° lon</span>
+      </div>
+      <div class="rrow">
+        <span class="rkey">✅ True Altitude</span>
+        <span class="rval green">${t.alt_km} km above Earth</span>
+      </div>
+      <div class="rrow">
+        <span class="rkey">📏 AI was off by</span>
+        <span class="rval" style="color:${accColor}">${t.error_km} km &nbsp; ${accLabel}</span>
+      </div>`;
+
+    // place predicted marker
+    const color = (markers[selectedCatnr] && markers[selectedCatnr].color) || "#ffd166";
+    L.marker([p.lat, p.lon], { icon: L.divIcon({
+      className:"",
+      html:`<div style="font-size:16px;filter:drop-shadow(0 0 5px ${color})">🎯</div>`,
+      iconSize:[20,20], iconAnchor:[10,10]
+    })}).addTo(map)
+      .bindTooltip(`AI Prediction: ${p.lat}°, ${p.lon}°<br>Error: ${t.error_km} km`)
+      .openTooltip();
+  }
+
+  html += `</div>
+    <div class="explain-box" style="margin-top:8px">
+      <b>What does ${t ? t.error_km + " km error mean?" : "this mean?"}</b><br>
+      ${t
+        ? t.error_km < 100
+          ? `The AI was within <b>${t.error_km} km</b> — that's impressive for a statistical model learning orbital mechanics!`
+          : t.error_km < 1000
+          ? `The AI was off by <b>${t.error_km} km</b>. For a simple ML model without any physics engine, this is a reasonable estimate.`
+          : `The AI was off by <b>${t.error_km} km</b>. This happens because orbital motion is complex and non-linear — more training data or a deeper neural network would help.`
+        : "Prediction complete. The AI has estimated the satellite's future position based on orbital patterns it learned during training."
+      }
+    </div>`;
+
+  document.getElementById("ml-result").innerHTML = html;
+}
+
+// ── 3D ORBIT ──────────────────────────────────────────────
+function draw3DOrbit(track, color, name) {
+  if (!track || track.length === 0) return;
+  const R = 6371;
+  const ex=[], ey=[], ez=[];
+  for (let i=0;i<=20;i++) for (let j=0;j<=20;j++) {
+    const phi=i/20*Math.PI, theta=j/20*2*Math.PI;
+    ex.push(R*Math.sin(phi)*Math.cos(theta));
+    ey.push(R*Math.sin(phi)*Math.sin(theta));
+    ez.push(R*Math.cos(phi));
+  }
+  Plotly.react("chart-3d",[
+    { type:"scatter3d", mode:"lines",
+      x:track.map(p=>p.x||0), y:track.map(p=>p.y||0), z:track.map(p=>p.z||0),
+      line:{color,width:3}, name },
+    { type:"mesh3d", x:ex, y:ey, z:ez, opacity:.35, color:"#1a4080",
+      name:"Earth", hoverinfo:"none" }
+  ],{
+    paper_bgcolor:"transparent", plot_bgcolor:"transparent",
+    margin:{l:0,r:0,t:0,b:0},
+    scene:{ bgcolor:"#050514",
+      xaxis:{title:"X km",color:"#444",gridcolor:"#1e2050"},
+      yaxis:{title:"Y km",color:"#444",gridcolor:"#1e2050"},
+      zaxis:{title:"Z km",color:"#444",gridcolor:"#1e2050"} },
+    legend:{font:{color:"#cdd6f4"},bgcolor:"transparent"}
+  },{ displayModeBar:false, responsive:true });
+}
+
+// ── SATELLITE INFO ────────────────────────────────────────
+async function loadInfo(catnr) {
+  const sat = satellites.find(s => s.catnr === catnr);
+  if (!sat) return;
+  const pos  = sat.position;
+  let html   = `<div id="info-current">${pos ? buildPosHTML(sat.name, pos) : ""}</div>`;
+
+  const mRes  = await fetch(`/api/model/${catnr}`);
+  const mInfo = await mRes.json();
+  if (mInfo.orbital_params) {
+    const op = mInfo.orbital_params;
+    html += `<div class="result-box" style="margin-top:10px">
+      <div style="font-size:.72em;color:var(--accent);letter-spacing:1px;margin-bottom:8px">
+        🛰 ORBITAL ELEMENTS
+      </div>
+      <div class="explain-box" style="margin-bottom:8px;font-size:.76em">
+        These numbers describe the exact shape and orientation of ${sat.name}'s orbit around Earth.
+        They come from live TLE data published by space agencies.
+      </div>
+      <div class="rrow"><span class="rkey">Inclination</span>
+        <span class="rval">${op.inclination}°
+          <span style="color:var(--muted);font-weight:400;font-size:.85em"> — tilt of orbit vs equator</span>
+        </span></div>
+      <div class="rrow"><span class="rkey">Eccentricity</span>
+        <span class="rval">${op.eccentricity}
+          <span style="color:var(--muted);font-weight:400;font-size:.85em"> — 0=circle, 1=parabola</span>
+        </span></div>
+      <div class="rrow"><span class="rkey">Mean Motion</span>
+        <span class="rval">${op.mean_motion} orbits/day</span></div>
+      <div class="rrow"><span class="rkey">RAAN</span>
+        <span class="rval">${op.raan}°
+          <span style="color:var(--muted);font-weight:400;font-size:.85em"> — equator crossing angle</span>
+        </span></div>
+      <div class="rrow"><span class="rkey">Arg. of Perigee</span>
+        <span class="rval">${op.arg_perigee}°
+          <span style="color:var(--muted);font-weight:400;font-size:.85em"> — closest point angle</span>
+        </span></div>
+    </div>`;
+  }
+  document.getElementById("info-content").innerHTML = html;
+  switchTab("info");
+}
+
+// ── GROUND STATION ────────────────────────────────────────
+function updateGroundStation() {
+  gs.name = document.getElementById("gs-name").value || "My Station";
+  gs.lat  = parseFloat(document.getElementById("gs-lat").value);
+  gs.lon  = parseFloat(document.getElementById("gs-lon").value);
+  placeGroundStation();
+  map.setView([gs.lat, gs.lon], 5);
+  toast(`📍 Ground station updated: ${gs.name}`);
+}
+
+// ── REFRESH TLE ───────────────────────────────────────────
+async function refreshTLE() {
+  toast("🔄 Refreshing live satellite data from CelesTrak...");
+  await fetch("/api/refresh",{ method:"POST" });
+  await loadSatellites();
+  toast("✅ Satellite data refreshed!");
+}
+
+// ── TABS ──────────────────────────────────────────────────
+function switchTab(id) {
+  const ids = ["passes","ml","orbit3d","info"];
+  document.querySelectorAll(".tab").forEach((t,i) =>
+    t.classList.toggle("active", ids[i]===id));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+  document.getElementById(`tab-${id}`).classList.add("active");
+}
+
+// ── TOAST ─────────────────────────────────────────────────
+function toast(msg, duration=3000) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), duration);
+}
+
+// ── INIT ──────────────────────────────────────────────────
+loadSatellites();
+</script>
+</body>
+</html>

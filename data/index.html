@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORBITX — Satellite Analytics Platform</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a1a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+  header { background: linear-gradient(135deg, #0d47a1, #1a237e);
+            padding: 40px 20px; text-align: center; border-bottom: 2px solid #00d4ff; }
+  header h1 { font-size: 3em; color: #00d4ff; letter-spacing: 6px; }
+  header p  { color: #90caf9; margin-top: 10px; font-size: 1.1em; }
+  .badge { display: inline-block; background: #00d4ff22; border: 1px solid #00d4ff;
+            color: #00d4ff; padding: 4px 12px; border-radius: 20px; margin: 4px; font-size: 0.85em; }
+  .stats { display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; padding: 30px 20px; }
+  .stat-card { background: #111130; border: 1px solid #00d4ff33; border-radius: 12px;
+                padding: 20px 30px; text-align: center; min-width: 180px; }
+  .stat-card .value { font-size: 2em; color: #00d4ff; font-weight: bold; }
+  .stat-card .label { font-size: 0.85em; color: #888; margin-top: 4px; }
+  .section { padding: 20px; max-width: 1200px; margin: 0 auto; }
+  .section h2 { color: #00d4ff; margin-bottom: 16px; font-size: 1.4em; letter-spacing: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .card { background: #111130; border: 1px solid #1e1e4a; border-radius: 10px; overflow: hidden;
+           transition: transform 0.2s, border-color 0.2s; }
+  .card:hover { transform: translateY(-4px); border-color: #00d4ff; }
+  .card a { display: block; padding: 24px; text-decoration: none; color: inherit; }
+  .card .icon { font-size: 2.5em; margin-bottom: 10px; }
+  .card h3 { color: #00d4ff; font-size: 1.1em; margin-bottom: 6px; }
+  .card p  { color: #888; font-size: 0.88em; line-height: 1.5; }
+  .model-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .model-table th { background: #00d4ff22; color: #00d4ff; padding: 10px; text-align: left; border-bottom: 1px solid #00d4ff44; }
+  .model-table td { padding: 10px; border-bottom: 1px solid #1e1e4a; font-size: 0.9em; }
+  .best { color: #76ff03; font-weight: bold; }
+  footer { text-align: center; padding: 30px; color: #444; border-top: 1px solid #1e1e4a; margin-top: 40px; }
+  footer a { color: #00d4ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>&#x1F6F0; ORBITX</h1>
+  <p>Advanced Satellite Analytics &amp; ML Prediction Platform</p>
+  <div style="margin-top:16px">
+    <span class="badge">Python</span>
+    <span class="badge">SGP4</span>
+    <span class="badge">Machine Learning</span>
+    <span class="badge">Plotly</span>
+    <span class="badge">Folium</span>
+    <span class="badge">scikit-learn</span>
+    <span class="badge">Real-Time TLE</span>
+    <span class="badge">10 Satellites</span>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat-card"><div class="value">10</div><div class="label">Satellites Tracked</div></div>
+  <div class="stat-card"><div class="value">4</div><div class="label">ML Models Compared</div></div>
+  <div class="stat-card"><div class="value">-0.002</div><div class="label">Best R² Score</div></div>
+  <div class="stat-card"><div class="value">6798.2 km</div><div class="label">Best Position Error</div></div>
+  <div class="stat-card"><div class="value">10K+</div><div class="label">Training Samples</div></div>
+</div>
+
+<div class="section">
+  <h2>&#x1F4CA; INTERACTIVE VISUALIZATIONS</h2>
+  <div class="grid">
+    <div class="card"><a href="plots/orbit_3d_interactive.html">
+      <div class="icon">&#x1F30D;</div>
+      <h3>3D Orbit Visualization</h3>
+      <p>Interactive 3D plot of true vs predicted satellite orbits with Earth globe and multi-satellite tracks.</p>
+    </a></div>
+    <div class="card"><a href="plots/ground_track_map.html">
+      <div class="icon">&#x1F5FA;</div>
+      <h3>Ground Track Map</h3>
+      <p>Live ground track of all satellites on an interactive world map with position markers.</p>
+    </a></div>
+    <div class="card"><a href="plots/altitude_velocity.html">
+      <div class="icon">&#x1F4C8;</div>
+      <h3>Altitude &amp; Velocity Analytics</h3>
+      <p>Altitude decay, orbital speed, distribution analysis and speed-altitude correlation for all satellites.</p>
+    </a></div>
+    <div class="card"><a href="plots/model_comparison.html">
+      <div class="icon">&#x1F916;</div>
+      <h3>ML Model Comparison</h3>
+      <p>R², MSE, and average position error compared across Linear Regression, Random Forest, Gradient Boosting, and Neural Network.</p>
+    </a></div>
+    <div class="card"><a href="plots/feature_importance.html">
+      <div class="icon">&#x1F50D;</div>
+      <h3>Feature Importance</h3>
+      <p>Which orbital parameters matter most for position prediction — ranked by Random Forest importance scores.</p>
+    </a></div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:30px">
+  <h2>&#x1F9E0; MODEL PERFORMANCE</h2>
+  <table class="model-table">
+    <thead><tr><th>Model</th><th>R² Score</th><th>Avg Position Error (km)</th><th>MSE</th></tr></thead>
+    <tbody>
+      <tr><td>Linear Regression</td><td>-0.0022</td><td>6798.72</td><td>15416597.37</td></tr>
+      <tr><td>Random Forest</td><td>-1.0598</td><td>8577.00</td><td>30508927.88</td></tr>
+      <tr><td>Gradient Boosting</td><td>-0.7845</td><td>8044.94</td><td>26330313.01</td></tr>
+      <tr class="best"><td>★ Neural Network</td><td>-0.0019</td><td>6798.23</td><td>15413365.89</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section" style="margin-top:30px">
+  <h2>&#x1F4CB; DATA FILES</h2>
+  <div class="grid">
+    <div class="card"><a href="orbit_dataset.csv">
+      <div class="icon">&#x1F4BE;</div><h3>Orbit Dataset (CSV)</h3>
+      <p>10,000 propagated position samples with orbital elements, XYZ coordinates, lat/lon, altitude and speed.</p>
+    </a></div>
+    <div class="card"><a href="model_metrics.csv">
+      <div class="icon">&#x1F4CA;</div><h3>Model Metrics (CSV)</h3>
+      <p>Exported R², MSE and average error for all trained models.</p>
+    </a></div>
+    <div class="card"><a href="pass_predictions.csv">
+      <div class="icon">&#x1F4E1;</div><h3>Pass Predictions (CSV)</h3>
+      <p>Upcoming satellite passes over ground station: AOS, LOS, duration, max elevation and range.</p>
+    </a></div>
+  </div>
+</div>
+
+<footer>
+  <p>Built with Python &bull; SGP4 &bull; scikit-learn &bull; Plotly &bull; Folium</p>
+  <p style="margin-top:8px">Data source: <a href="https://celestrak.org" target="_blank">CelesTrak</a></p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv
+venv/
+
+# generated output files — keep webapp but skip heavy generated data
+data/tle_cache.json
+data/orbit_dataset.csv
+data/model_metrics.csv
+data/pass_predictions.csv
+data/conjunctions.csv
+data/plots/
+data/correlation_heatmap.png
+data/feature_histograms.png
+data/pairplot.png
+data/feature_importance.png
+data/error_distribution.png
+data/orbit_3d.png
+
+# keep the webapp frontend
+!data/webapp/
+!data/webapp/index.html
+
+.vercel
